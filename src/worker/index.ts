@@ -111,7 +111,7 @@ app.post("/api/estimates", async (c) => {
 // GET /api/metaculus — proxy Metaculus question 5121
 app.get("/api/metaculus", async (c) => {
   const res = await fetch("https://www.metaculus.com/api2/questions/5121/", {
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", Authorization: c.env.METACULUS_API_KEY },
     cf: { cacheTtl: 3600, cacheEverything: true },
   });
 
