@@ -1,0 +1,17 @@
+name = "pdoom"
+main = "src/worker/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "pdoom"
+database_id = "placeholder-replace-with-real-id"
+
+[vars]
+GOOGLE_CLIENT_ID = ""
+APP_URL = "http://localhost:8787"

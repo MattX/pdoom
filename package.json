@@ -1,0 +1,33 @@
+{
+  "name": "pdoom",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:worker\" \"npm run dev:frontend\"",
+    "dev:frontend": "vite",
+    "dev:worker": "wrangler dev --port 8787",
+    "build": "vite build",
+    "deploy": "npm run build && wrangler deploy",
+    "db:migrate": "wrangler d1 execute pdoom --file=schema.sql",
+    "db:migrate:local": "wrangler d1 execute pdoom --local --file=schema.sql"
+  },
+  "dependencies": {
+    "hono": "^4.4.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "recharts": "^2.12.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240620.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "concurrently": "^8.2.2",
+    "postcss": "^8.4.39",
+    "tailwindcss": "^3.4.6",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.3",
+    "wrangler": "^3.63.1"
+  }
+}

@@ -1,0 +1,4 @@
+# Copy to .dev.vars and fill in values for local development
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+JWT_SECRET=some-random-secret-at-least-32-chars
+APP_URL=http://localhost:8787

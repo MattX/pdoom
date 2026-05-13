@@ -1,0 +1,129 @@
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { getCookie } from "hono/cookie";
+import type { Env, EstimateWithUser } from "./types";
+import { authRouter } from "./auth";
+import { verifyJWT } from "./jwt";
+
+const app = new Hono<{ Bindings: Env }>();
+
+app.use("/api/*", cors({ origin: "*", credentials: true }));
+
+// Auth routes
+app.route("/auth", authRouter);
+
+// Session middleware helper
+async function requireAuth(c: { req: { raw: Request }; env: Env; json: Function }) {
+  const token = getCookie({ req: { raw: c.req.raw } } as any, "session");
+  if (!token) return null;
+  return verifyJWT(token, c.env.JWT_SECRET);
+}
+
+// GET /api/me
+app.get("/api/me", async (c) => {
+  const session = await requireAuth(c);
+  if (!session) return c.json({ user: null });
+
+  const user = await c.env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(session.sub).first();
+  return c.json({ user });
+});
+
+// GET /api/users
+app.get("/api/users", async (c) => {
+  const { results } = await c.env.DB.prepare(
+    "SELECT id, name, picture FROM users ORDER BY created_at ASC"
+  ).all();
+  return c.json({ users: results });
+});
+
+// GET /api/estimates
+app.get("/api/estimates", async (c) => {
+  const userId = c.req.query("userId");
+
+  let query = `
+    SELECT e.*, u.name as user_name, u.picture as user_picture
+    FROM estimates e
+    JOIN users u ON e.user_id = u.id
+  `;
+  const bindings: string[] = [];
+
+  if (userId) {
+    query += " WHERE e.user_id = ?";
+    bindings.push(userId);
+  }
+
+  query += " ORDER BY e.created_at DESC LIMIT 500";
+
+  const stmt = bindings.length
+    ? c.env.DB.prepare(query).bind(...bindings)
+    : c.env.DB.prepare(query);
+
+  const { results } = await stmt.all<EstimateWithUser>();
+  return c.json({ estimates: results });
+});
+
+// POST /api/estimates
+app.post("/api/estimates", async (c) => {
+  const session = await requireAuth(c);
+  if (!session) return c.json({ error: "Unauthorized" }, 401);
+
+  const body = await c.req.json<{
+    agi_2030?: number;
+    agi_2035?: number;
+    agi_2040?: number;
+    agi_2045?: number;
+    pdoom_given_agi?: number;
+    note?: string;
+  }>();
+
+  const fields = ["agi_2030", "agi_2035", "agi_2040", "agi_2045", "pdoom_given_agi"] as const;
+
+  for (const field of fields) {
+    const val = body[field];
+    if (val !== undefined && val !== null) {
+      if (typeof val !== "number" || val < 0 || val > 1) {
+        return c.json({ error: `${field} must be a number between 0 and 1` }, 400);
+      }
+    }
+  }
+
+  const hasAny = fields.some((f) => body[f] !== undefined && body[f] !== null);
+  if (!hasAny) return c.json({ error: "At least one estimate is required" }, 400);
+
+  const result = await c.env.DB.prepare(
+    `INSERT INTO estimates (user_id, agi_2030, agi_2035, agi_2040, agi_2045, pdoom_given_agi, note)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(
+      session.sub,
+      body.agi_2030 ?? null,
+      body.agi_2035 ?? null,
+      body.agi_2040 ?? null,
+      body.agi_2045 ?? null,
+      body.pdoom_given_agi ?? null,
+      body.note ?? null
+    )
+    .run();
+
+  return c.json({ id: result.meta.last_row_id }, 201);
+});
+
+// GET /api/metaculus — proxy Metaculus question 5121
+app.get("/api/metaculus", async (c) => {
+  const res = await fetch("https://www.metaculus.com/api2/questions/5121/", {
+    headers: { Accept: "application/json" },
+    cf: { cacheTtl: 3600, cacheEverything: true },
+  });
+
+  if (!res.ok) return c.json({ error: "Metaculus unavailable" }, 502);
+
+  const data = await res.json();
+  return c.json(data);
+});
+
+// Serve static assets for everything else
+app.all("*", async (c) => {
+  return c.env.ASSETS.fetch(c.req.raw);
+});
+
+export default app;
