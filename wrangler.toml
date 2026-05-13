@@ -13,5 +13,5 @@ database_name = "pdoom"
 database_id = "placeholder-replace-with-real-id"
 
 [vars]
-GOOGLE_CLIENT_ID = ""
+GOOGLE_CLIENT_ID = "826189004528-0u8n3v3pap83f6i66csr1av2arv5qrmg.apps.googleusercontent.com"
 APP_URL = "http://localhost:8787"
