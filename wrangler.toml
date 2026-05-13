@@ -15,3 +15,7 @@ database_id = "cf926c65-e204-41c2-8326-95243a7e9c07"
 [vars]
 GOOGLE_CLIENT_ID = "826189004528-0u8n3v3pap83f6i66csr1av2arv5qrmg.apps.googleusercontent.com"
 APP_URL = "https://pdoom.matthieufelix.workers.dev"
+
+[observability.logs]
+enabled = true
+invocation_logs = true
