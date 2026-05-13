@@ -3,6 +3,10 @@ import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import type { Env } from "./types";
 import { signJWT, verifyJWT } from "./jwt";
 
+function escapeHtml(s: string) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 export const authRouter = new Hono<{ Bindings: Env }>();
 
 authRouter.get("/google", (c) => {
@@ -39,6 +43,7 @@ authRouter.get("/google/callback", async (c) => {
 
   deleteCookie(c, "oauth_state", { path: "/" });
 
+  const redirectUri = `${c.env.APP_URL}/auth/google/callback`;
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -46,12 +51,24 @@ authRouter.get("/google/callback", async (c) => {
       code,
       client_id: c.env.GOOGLE_CLIENT_ID,
       client_secret: c.env.GOOGLE_CLIENT_SECRET,
-      redirect_uri: `${c.env.APP_URL}/auth/google/callback`,
+      redirect_uri: redirectUri,
       grant_type: "authorization_code",
     }),
   });
 
-  if (!tokenRes.ok) return c.redirect("/?error=token_exchange_failed");
+  if (!tokenRes.ok) {
+    const body = await tokenRes.text();
+    return c.html(`<!doctype html><html><body style="font-family:monospace;padding:2rem;background:#111;color:#f87171">
+      <h2>Token exchange failed (HTTP ${tokenRes.status})</h2>
+      <h3>Google response:</h3>
+      <pre style="white-space:pre-wrap;background:#1f2937;padding:1rem;border-radius:8px;color:#fcd34d">${escapeHtml(body)}</pre>
+      <h3>Request details:</h3>
+      <pre style="white-space:pre-wrap;background:#1f2937;padding:1rem;border-radius:8px;color:#93c5fd">client_id: ${escapeHtml(c.env.GOOGLE_CLIENT_ID || "(empty — check wrangler.toml)")}
+redirect_uri: ${escapeHtml(redirectUri)}
+client_secret set: ${c.env.GOOGLE_CLIENT_SECRET ? "yes (" + c.env.GOOGLE_CLIENT_SECRET.length + " chars)" : "NO — set via wrangler secret put GOOGLE_CLIENT_SECRET"}</pre>
+      <p><a href="/" style="color:#60a5fa">← back</a></p>
+    </body></html>`, tokenRes.status as any);
+  }
 
   const { access_token } = (await tokenRes.json()) as { access_token: string };
 
@@ -59,7 +76,14 @@ authRouter.get("/google/callback", async (c) => {
     headers: { Authorization: `Bearer ${access_token}` },
   });
 
-  if (!userRes.ok) return c.redirect("/?error=userinfo_failed");
+  if (!userRes.ok) {
+    const body = await userRes.text();
+    return c.html(`<!doctype html><html><body style="font-family:monospace;padding:2rem;background:#111;color:#f87171">
+      <h2>Userinfo failed (HTTP ${userRes.status})</h2>
+      <pre style="white-space:pre-wrap;background:#1f2937;padding:1rem;border-radius:8px;color:#fcd34d">${escapeHtml(body)}</pre>
+      <p><a href="/" style="color:#60a5fa">← back</a></p>
+    </body></html>`, userRes.status as any);
+  }
 
   const googleUser = (await userRes.json()) as {
     id: string;
