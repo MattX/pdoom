@@ -88,8 +88,8 @@ export default function HistoryChart({ estimates, users, selectedUser }: Props) 
                     {user.picture ? (
                       <img
                         src={user.picture}
-                        className="w-7 h-7 rounded-full ring-2 cursor-default"
-                        style={{ ringColor: color, outline: `2px solid ${color}` }}
+                        className="w-7 h-7 rounded-full cursor-default"
+                        style={{ outline: `2px solid ${color}` }}
                         alt={user.name}
                       />
                     ) : (
