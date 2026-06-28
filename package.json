@@ -8,8 +8,10 @@
     "dev:worker": "wrangler dev --port 8787",
     "build": "vite build",
     "deploy": "npm run build && wrangler deploy",
-    "db:migrate": "wrangler d1 execute pdoom --file=schema.sql",
-    "db:migrate:local": "wrangler d1 execute pdoom --local --file=schema.sql"
+    "db:migrate": "wrangler d1 execute pdoom --remote --file=schema.sql",
+    "db:migrate:local": "wrangler d1 execute pdoom --local --file=schema.sql",
+    "db:migrate:0001": "wrangler d1 execute pdoom --remote --file=migrations/0001_agi_curve.sql",
+    "db:migrate:0001:local": "wrangler d1 execute pdoom --local --file=migrations/0001_agi_curve.sql"
   },
   "dependencies": {
     "hono": "^4.4.0",

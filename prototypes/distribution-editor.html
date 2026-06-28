@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>AGI timeline distribution editor — prototype</title>
+<style>
+  :root {
+    --bg: #0b0f17;
+    --panel: #111827;
+    --panel2: #1f2937;
+    --line: #374151;
+    --text: #e5e7eb;
+    --muted: #9ca3af;
+    --faint: #6b7280;
+    --accent: #3b82f6;
+    --accent2: #60a5fa;
+    --bar: #2563eb;
+    --never: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 16px 16px 64px; }
+  h1 { font-size: 18px; margin: 4px 0 2px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+  .card { background: var(--panel); border-radius: 14px; padding: 14px; margin-bottom: 16px; }
+  .chart-wrap { width: 100%; touch-action: none; -webkit-user-select: none; user-select: none; }
+  svg { width: 100%; display: block; overflow: visible; }
+  .grid-line { stroke: var(--line); stroke-width: 1; }
+  .grid-line.faint { stroke: #232b39; }
+  .axis-label { fill: var(--faint); font-size: 11px; }
+  .cdf-area { fill: rgba(59,130,246,0.12); }
+  .cdf-line { fill: none; stroke: var(--accent2); stroke-width: 2.5; stroke-linejoin: round; }
+  .handle-hit { fill: transparent; cursor: ns-resize; }
+  .handle { fill: var(--accent); stroke: #0b0f17; stroke-width: 2; pointer-events: none; transition: r .08s; }
+  .handle.active { fill: #fff; }
+  .handle-col.active .col-bg { fill: rgba(96,165,250,0.06); }
+  .col-bg { fill: transparent; }
+  .bar { fill: var(--bar); }
+  .bar.never { fill: var(--never); }
+  .bar-label { fill: var(--muted); font-size: 10px; text-anchor: middle; }
+  .bar-val { fill: var(--text); font-size: 10px; text-anchor: middle; font-variant-numeric: tabular-nums; }
+
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--panel2); }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  td.num { text-align: right; }
+  .pct-input {
+    width: 64px; text-align: right; background: var(--panel2); border: 1px solid var(--line);
+    color: var(--text); border-radius: 8px; padding: 6px 8px; font: inherit;
+    font-variant-numeric: tabular-nums;
+  }
+  .pct-input:focus { outline: none; border-color: var(--accent); }
+  .inc { color: var(--muted); font-size: 12px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  button {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 9px; padding: 8px 12px; font: inherit; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .hint { color: var(--faint); font-size: 12px; margin-top: 8px; }
+  .out { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--muted);
+    background: #0d1320; border-radius: 8px; padding: 10px; white-space: pre-wrap; word-break: break-word; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AGI timeline distribution</h1>
+  <p class="sub">Drag the curve to set the chance AGI has arrived <b>by</b> each year. Bars below show the implied chance it arrives <b>in</b> each period.</p>
+
+  <div class="card">
+    <div class="chart-wrap" id="chartWrap">
+      <svg id="chart" viewBox="0 0 600 420" preserveAspectRatio="xMidYMid meet" aria-label="distribution editor"></svg>
+    </div>
+    <div class="legend">
+      <span><i style="background:var(--accent2)"></i>Cumulative P(AGI by year)</span>
+      <span><i style="background:var(--bar)"></i>P(AGI in period)</span>
+      <span><i style="background:var(--never)"></i>Never / after 2100</span>
+    </div>
+    <p class="hint">Tip: tap anywhere in a column and drag up/down. Later years can't be lower than earlier years.</p>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr><th>By year</th><th class="num">Cumulative</th><th class="num">In period</th></tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <button id="presetFast">Preset: fast</button>
+      <button id="presetSlow">Preset: slow</button>
+      <button id="presetSkeptic">Preset: skeptic</button>
+      <button id="resetBtn">Reset</button>
+    </div>
+    <p class="hint">Output payload (what would be sent on submit):</p>
+    <div class="out" id="out"></div>
+  </div>
+</div>
+
+<script>
+// ----- model -----------------------------------------------------------
+const YEARS = [2030, 2035, 2040, 2050, 2075, 2100];
+// cumulative P(AGI by year), monotonic non-decreasing, 0..1
+let cdf = [0.20, 0.45, 0.60, 0.75, 0.88, 0.92];
+
+const PRESETS = {
+  fast:    [0.35, 0.62, 0.78, 0.90, 0.96, 0.98],
+  slow:    [0.08, 0.20, 0.33, 0.55, 0.78, 0.88],
+  skeptic: [0.05, 0.12, 0.20, 0.32, 0.48, 0.55],
+};
+const DEFAULT = cdf.slice();
+
+// ----- geometry --------------------------------------------------------
+const VB_W = 600, VB_H = 420;
+const M = { l: 44, r: 16, t: 14, b: 132 };   // bottom band reserved for PDF bars
+const plot = {
+  x: M.l, y: M.t,
+  w: VB_W - M.l - M.r,
+  h: VB_H - M.t - M.b,
+};
+const BAR = { top: plot.y + plot.h + 46, h: 64 }; // PDF band
+
+const N = YEARS.length;
+function colX(i) { return plot.x + (plot.w * (i + 0.5)) / N; } // center of column i
+function colLeft(i) { return plot.x + (plot.w * i) / N; }
+function colW() { return plot.w / N; }
+function yToVal(y) { return clamp(1 - (y - plot.y) / plot.h, 0, 1); }
+function valToY(v) { return plot.y + (1 - v) * plot.h; }
+
+function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+
+// enforce monotonic after setting index i to value v
+function setMono(i, v) {
+  v = clamp(v, 0, 1);
+  cdf[i] = v;
+  for (let j = i + 1; j < N; j++) if (cdf[j] < cdf[i]) cdf[j] = cdf[i];
+  for (let j = i - 1; j >= 0; j--) if (cdf[j] > cdf[i]) cdf[j] = cdf[i];
+}
+
+// ----- rendering -------------------------------------------------------
+const svg = document.getElementById('chart');
+const NS = 'http://www.w3.org/2000/svg';
+function el(name, attrs, kids) {
+  const e = document.createElementNS(NS, name);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (kids) for (const c of kids) e.appendChild(c);
+  return e;
+}
+
+let activeIdx = -1;
+
+function render() {
+  svg.textContent = '';
+
+  // --- CDF grid + y axis (0..100%) ---
+  for (let p = 0; p <= 100; p += 25) {
+    const y = valToY(p / 100);
+    svg.appendChild(el('line', { class: 'grid-line' + (p % 50 ? ' faint' : ''),
+      x1: plot.x, y1: y, x2: plot.x + plot.w, y2: y }));
+    svg.appendChild(el('text', { class: 'axis-label', x: plot.x - 8, y: y + 4,
+      'text-anchor': 'end' })).textContent = p + '%';
+  }
+
+  // --- column backgrounds + hit areas ---
+  for (let i = 0; i < N; i++) {
+    const g = el('g', { class: 'handle-col' + (i === activeIdx ? ' active' : '') });
+    g.appendChild(el('rect', { class: 'col-bg', x: colLeft(i), y: plot.y, width: colW(), height: plot.h }));
+    const hit = el('rect', { class: 'handle-hit', x: colLeft(i), y: plot.y - 6,
+      width: colW(), height: plot.h + 12, 'data-i': i });
+    g.appendChild(hit);
+    svg.appendChild(g);
+  }
+
+  // --- CDF area + line ---
+  const pts = cdf.map((v, i) => [colX(i), valToY(v)]);
+  // area under curve down to baseline
+  let area = `M ${pts[0][0]} ${plot.y + plot.h} `;
+  pts.forEach(p => area += `L ${p[0]} ${p[1]} `);
+  area += `L ${pts[N - 1][0]} ${plot.y + plot.h} Z`;
+  svg.appendChild(el('path', { class: 'cdf-area', d: area }));
+
+  let line = '';
+  pts.forEach((p, i) => line += (i ? 'L' : 'M') + ` ${p[0]} ${p[1]} `);
+  svg.appendChild(el('path', { class: 'cdf-line', d: line }));
+
+  // --- handles + year labels ---
+  for (let i = 0; i < N; i++) {
+    const [hx, hy] = pts[i];
+    svg.appendChild(el('circle', { class: 'handle' + (i === activeIdx ? ' active' : ''),
+      cx: hx, cy: hy, r: i === activeIdx ? 9 : 7 }));
+    svg.appendChild(Object.assign(el('text', { class: 'axis-label', x: hx, y: plot.y + plot.h + 18,
+      'text-anchor': 'middle' }), { textContent: YEARS[i] }));
+  }
+
+  // --- PDF bars (incremental probability per period + never) ---
+  const incs = increments();
+  const maxInc = Math.max(0.0001, ...incs.map(x => x.p));
+  const barBase = BAR.top + BAR.h;
+  svg.appendChild(el('line', { class: 'grid-line faint',
+    x1: plot.x, y1: barBase, x2: plot.x + plot.w, y2: barBase }));
+
+  incs.forEach((seg, k) => {
+    const bx = colLeft(k) + colW() * 0.15;
+    const bw = colW() * 0.7;
+    const bh = (seg.p / maxInc) * BAR.h;
+    svg.appendChild(el('rect', { class: 'bar' + (seg.never ? ' never' : ''),
+      x: bx, y: barBase - bh, width: bw, height: bh, rx: 2 }));
+    svg.appendChild(Object.assign(el('text', { class: 'bar-val', x: bx + bw / 2, y: barBase - bh - 4 }),
+      { textContent: Math.round(seg.p * 100) + '%' }));
+    svg.appendChild(Object.assign(el('text', { class: 'bar-label', x: bx + bw / 2, y: barBase + 14 }),
+      { textContent: seg.label }));
+  });
+
+  renderTable(incs);
+  renderOut();
+}
+
+// incremental probabilities: [0->Y0], [Y0->Y1], ... and the "never" tail
+function increments() {
+  const out = [];
+  let prev = 0;
+  for (let i = 0; i < N; i++) {
+    out.push({
+      label: i === 0 ? '≤' + YEARS[0] : YEARS[i - 1] + '–' + YEARS[i],
+      p: Math.max(0, cdf[i] - prev),
+      never: false,
+    });
+    prev = cdf[i];
+  }
+  out.push({ label: 'never', p: Math.max(0, 1 - cdf[N - 1]), never: true });
+  return out;
+}
+
+function renderTable(incs) {
+  const tb = document.getElementById('tbody');
+  tb.textContent = '';
+  for (let i = 0; i < N; i++) {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      `<td>by ${YEARS[i]}</td>` +
+      `<td class="num"><input class="pct-input" data-i="${i}" inputmode="decimal" value="${(cdf[i]*100).toFixed(0)}">%</td>` +
+      `<td class="num inc">+${(incs[i].p*100).toFixed(0)}%</td>`;
+    tb.appendChild(tr);
+  }
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td>never</td><td class="num inc">—</td><td class="num inc">${(incs[N].p*100).toFixed(0)}%</td>`;
+  tb.appendChild(tr);
+
+  tb.querySelectorAll('.pct-input').forEach(inp => {
+    inp.addEventListener('change', () => {
+      const i = +inp.dataset.i;
+      let v = parseFloat(inp.value);
+      if (isNaN(v)) v = cdf[i] * 100;
+      setMono(i, v / 100);
+      render();
+    });
+  });
+}
+
+function renderOut() {
+  // map back to the existing schema's fixed-year fields via interpolation
+  const fields = { agi_2030: at(2030), agi_2035: at(2035), agi_2040: at(2040), agi_2045: at(2045) };
+  document.getElementById('out').textContent = JSON.stringify(fields, null, 2);
+}
+
+// interpolate cumulative prob at an arbitrary year from the anchors
+function at(year) {
+  if (year <= YEARS[0]) return round2(cdf[0] * (year /* clamp */ >= YEARS[0] ? 1 : 1));
+  for (let i = 1; i < N; i++) {
+    if (year <= YEARS[i]) {
+      const t = (year - YEARS[i-1]) / (YEARS[i] - YEARS[i-1]);
+      return round2(cdf[i-1] + t * (cdf[i] - cdf[i-1]));
+    }
+  }
+  return round2(cdf[N-1]);
+}
+function round2(v){ return Math.round(v*1000)/1000; }
+
+// ----- pointer dragging ------------------------------------------------
+function svgPoint(evt) {
+  const r = svg.getBoundingClientRect();
+  const x = (evt.clientX - r.left) / r.width * VB_W;
+  const y = (evt.clientY - r.top) / r.height * VB_H;
+  return { x, y };
+}
+function nearestCol(x) {
+  let best = 0, bd = Infinity;
+  for (let i = 0; i < N; i++) { const d = Math.abs(x - colX(i)); if (d < bd) { bd = d; best = i; } }
+  return best;
+}
+
+let dragging = false;
+function onDown(evt) {
+  const p = svgPoint(evt);
+  if (p.y < plot.y - 10 || p.y > plot.y + plot.h + 10) return; // only in CDF area
+  activeIdx = nearestCol(p.x);
+  dragging = true;
+  svg.setPointerCapture?.(evt.pointerId);
+  setMono(activeIdx, yToVal(p.y));
+  render();
+  evt.preventDefault();
+}
+function onMove(evt) {
+  if (!dragging) return;
+  const p = svgPoint(evt);
+  setMono(activeIdx, yToVal(p.y));
+  render();
+  evt.preventDefault();
+}
+function onUp(evt) {
+  if (!dragging) return;
+  dragging = false;
+  activeIdx = -1;
+  render();
+}
+svg.addEventListener('pointerdown', onDown);
+svg.addEventListener('pointermove', onMove);
+svg.addEventListener('pointerup', onUp);
+svg.addEventListener('pointercancel', onUp);
+
+// ----- controls --------------------------------------------------------
+function applyPreset(arr){ cdf = arr.slice(); render(); }
+document.getElementById('presetFast').onclick = () => applyPreset(PRESETS.fast);
+document.getElementById('presetSlow').onclick = () => applyPreset(PRESETS.slow);
+document.getElementById('presetSkeptic').onclick = () => applyPreset(PRESETS.skeptic);
+document.getElementById('resetBtn').onclick = () => applyPreset(DEFAULT);
+
+render();
+</script>
+</body>
+</html>

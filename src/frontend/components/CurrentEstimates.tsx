@@ -1,5 +1,6 @@
 import type { Estimate, User } from "../types";
-import { QUESTIONS, QUESTION_COLORS } from "../types";
+import { QUESTIONS, QUESTION_COLORS, CURVE_REF_YEARS } from "../types";
+import { probAt } from "../../shared/distribution";
 
 interface Props {
   estimates: Estimate[];
@@ -71,6 +72,11 @@ export default function CurrentEstimates({ estimates, users, selectedUser, onSel
           <thead>
             <tr className="border-b border-gray-800">
               <th className="text-left px-4 py-3 text-gray-400 font-medium">Person</th>
+              {CURVE_REF_YEARS.map((y) => (
+                <th key={y} className="text-right px-4 py-3 font-medium text-blue-400">
+                  AGI by {y}
+                </th>
+              ))}
               {QUESTIONS.map((q) => (
                 <th
                   key={q.key}
@@ -104,6 +110,13 @@ export default function CurrentEstimates({ estimates, users, selectedUser, onSel
                     <span className="text-gray-100">{user.name}</span>
                   </div>
                 </td>
+                {CURVE_REF_YEARS.map((y) => (
+                  <td key={y} className="px-4 py-3 text-right tabular-nums">
+                    <span className="font-mono text-blue-300">
+                      {estimate!.agi_curve ? pct(probAt(estimate!.agi_curve, y)) : "—"}
+                    </span>
+                  </td>
+                ))}
                 {QUESTIONS.map((q) => (
                   <td key={q.key} className="px-4 py-3 text-right tabular-nums">
                     <span

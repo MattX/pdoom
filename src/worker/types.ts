@@ -1,3 +1,6 @@
+import type { DistPoint } from "../shared/distribution";
+export type { DistPoint };
+
 export interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
@@ -16,16 +19,29 @@ export interface User {
   created_at: number;
 }
 
-export interface Estimate {
+// Raw row shape returned by D1 (agi_curve stored as JSON text)
+export interface EstimateRow {
   id: number;
   user_id: string;
-  agi_2030: number | null;
-  agi_2035: number | null;
-  agi_2040: number | null;
-  agi_2045: number | null;
+  agi_curve: string | null;
   pdoom_given_agi: number | null;
   note: string | null;
   created_at: number;
+}
+
+// API-facing shape (agi_curve is parsed into an array)
+export interface Estimate {
+  id: number;
+  user_id: string;
+  agi_curve: DistPoint[] | null;
+  pdoom_given_agi: number | null;
+  note: string | null;
+  created_at: number;
+}
+
+export interface EstimateRowWithUser extends EstimateRow {
+  user_name: string;
+  user_picture: string | null;
 }
 
 export interface EstimateWithUser extends Estimate {

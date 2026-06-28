@@ -1,13 +1,13 @@
 import type { Estimate } from "../types";
-import { QUESTIONS, QUESTION_COLORS } from "../types";
+import { QUESTIONS, QUESTION_COLORS, CURVE_REF_YEARS } from "../types";
+import { probAt } from "../../shared/distribution";
 
 interface Props {
   estimates: Estimate[];
   selectedUser: string | null;
 }
 
-function pct(v: number | null): string {
-  if (v === null) return null as any;
+function pct(v: number): string {
   return `${(v * 100).toFixed(1)}%`;
 }
 
@@ -55,6 +55,16 @@ export default function EstimateLog({ estimates, selectedUser }: Props) {
                   <span className="text-xs text-gray-600 flex-shrink-0">{timeAgo(e.created_at)}</span>
                 </div>
                 <div className="flex flex-wrap gap-2 mt-1.5">
+                  {/* AGI curve summary — show P(by year) at a few reference years */}
+                  {e.agi_curve && e.agi_curve.length > 0 && CURVE_REF_YEARS.map((y) => (
+                    <span
+                      key={y}
+                      className="text-xs px-2 py-0.5 rounded-full bg-gray-800 font-mono text-blue-300"
+                    >
+                      AGI by {y}: {pct(probAt(e.agi_curve!, y))}
+                    </span>
+                  ))}
+                  {/* Scalar questions */}
                   {QUESTIONS.map((q) => {
                     const val = e[q.key];
                     if (val === null) return null;
