@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import type { Estimate, User } from "../types";
 import { QUESTIONS, QUESTION_COLORS } from "../types";
 import { probAt, anchorAtZero, MIN_YEAR } from "../../shared/distribution";
+import AgiTimelineHeatmap from "./AgiTimelineHeatmap";
 
 interface Props {
   estimates: Estimate[];
@@ -28,6 +30,7 @@ function pct(v: number | null): string {
 }
 
 export default function HistoryChart({ estimates, users, selectedUser }: Props) {
+  const [agiView, setAgiView] = useState<"curves" | "heatmap">("curves");
   // Latest estimate per user
   const latestByUser = new Map<string, Estimate>();
   for (const e of [...estimates].reverse()) {
@@ -63,66 +66,96 @@ export default function HistoryChart({ estimates, users, selectedUser }: Props) 
     <div className="bg-gray-900 rounded-xl p-6 space-y-8">
       <h2 className="text-lg font-semibold">Distribution</h2>
 
-      {/* AGI timeline CDF overlay */}
+      {/* AGI timeline */}
       {curveEstimates.length > 0 && (
         <div>
-          <p className="text-sm font-medium text-blue-400 mb-4">AGI timeline — cumulative P(AGI by year)</p>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={cdfData} margin={{ top: 4, right: 8, bottom: 4, left: 4 }}>
-              <XAxis
-                dataKey="year"
-                tickLine={false}
-                axisLine={{ stroke: "#374151" }}
-                tick={{ fill: "#6b7280", fontSize: 11 }}
-                tickFormatter={(y) => String(y)}
-                interval={Math.max(0, Math.floor(SAMPLE_YEARS.length / 6) - 1)}
-              />
-              <YAxis
-                tickLine={false}
-                axisLine={false}
-                tick={{ fill: "#6b7280", fontSize: 11 }}
-                tickFormatter={(v) => `${Math.round(v * 100)}%`}
-                domain={[0, 1]}
-                width={36}
-              />
-              <Tooltip
-                contentStyle={{ background: "#1f2937", border: "1px solid #374151", borderRadius: 8 }}
-                labelStyle={{ color: "#9ca3af", fontSize: 12 }}
-                formatter={(value: number, userId: string) => {
-                  const user = userMap.get(userId);
-                  return [`${(value * 100).toFixed(1)}%`, user?.name.split(" ")[0] ?? userId];
-                }}
-              />
-              <ReferenceLine y={0.5} stroke="#374151" strokeDasharray="3 3" />
-              <ReferenceLine y={1} stroke="#374151" strokeDasharray="3 3" />
-              {curveEstimates.map((e, idx) => (
-                <Line
-                  key={e.user_id}
-                  type="monotone"
-                  dataKey={e.user_id}
-                  stroke={USER_COLORS[idx % USER_COLORS.length]}
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 4 }}
-                />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-          {/* Legend */}
-          <div className="flex flex-wrap gap-3 mt-2">
-            {curveEstimates.map((e, idx) => {
-              const user = userMap.get(e.user_id);
-              return (
-                <div key={e.user_id} className="flex items-center gap-1.5 text-xs text-gray-400">
-                  <span
-                    className="inline-block w-3 h-0.5 rounded"
-                    style={{ background: USER_COLORS[idx % USER_COLORS.length] }}
-                  />
-                  {user?.name.split(" ")[0] ?? "?"}
-                </div>
-              );
-            })}
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm font-medium text-blue-400">AGI timeline — cumulative P(AGI by year)</p>
+            <div className="flex items-center gap-1 bg-gray-800 rounded-lg p-0.5">
+              <button
+                onClick={() => setAgiView("curves")}
+                className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
+                  agiView === "curves"
+                    ? "bg-gray-700 text-gray-100"
+                    : "text-gray-500 hover:text-gray-300"
+                }`}
+              >
+                Curves
+              </button>
+              <button
+                onClick={() => setAgiView("heatmap")}
+                className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
+                  agiView === "heatmap"
+                    ? "bg-gray-700 text-gray-100"
+                    : "text-gray-500 hover:text-gray-300"
+                }`}
+              >
+                Heatmap
+              </button>
+            </div>
           </div>
+
+          {agiView === "curves" ? (
+            <>
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={cdfData} margin={{ top: 4, right: 8, bottom: 4, left: 4 }}>
+                  <XAxis
+                    dataKey="year"
+                    tickLine={false}
+                    axisLine={{ stroke: "#374151" }}
+                    tick={{ fill: "#6b7280", fontSize: 11 }}
+                    tickFormatter={(y) => String(y)}
+                    interval={Math.max(0, Math.floor(SAMPLE_YEARS.length / 6) - 1)}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fill: "#6b7280", fontSize: 11 }}
+                    tickFormatter={(v) => `${Math.round(v * 100)}%`}
+                    domain={[0, 1]}
+                    width={36}
+                  />
+                  <Tooltip
+                    contentStyle={{ background: "#1f2937", border: "1px solid #374151", borderRadius: 8 }}
+                    labelStyle={{ color: "#9ca3af", fontSize: 12 }}
+                    formatter={(value: number, userId: string) => {
+                      const user = userMap.get(userId);
+                      return [`${(value * 100).toFixed(1)}%`, user?.name.split(" ")[0] ?? userId];
+                    }}
+                  />
+                  <ReferenceLine y={0.5} stroke="#374151" strokeDasharray="3 3" />
+                  <ReferenceLine y={1} stroke="#374151" strokeDasharray="3 3" />
+                  {curveEstimates.map((e, idx) => (
+                    <Line
+                      key={e.user_id}
+                      type="monotone"
+                      dataKey={e.user_id}
+                      stroke={USER_COLORS[idx % USER_COLORS.length]}
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 4 }}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+              <div className="flex flex-wrap gap-3 mt-2">
+                {curveEstimates.map((e, idx) => {
+                  const user = userMap.get(e.user_id);
+                  return (
+                    <div key={e.user_id} className="flex items-center gap-1.5 text-xs text-gray-400">
+                      <span
+                        className="inline-block w-3 h-0.5 rounded"
+                        style={{ background: USER_COLORS[idx % USER_COLORS.length] }}
+                      />
+                      {user?.name.split(" ")[0] ?? "?"}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <AgiTimelineHeatmap estimates={estimates} selectedUser={selectedUser} />
+          )}
         </div>
       )}
 
