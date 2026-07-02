@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { api } from "../api";
-import { QUESTIONS, type QuestionKey } from "../types";
+import { QUESTIONS, type QuestionKey, type Estimate } from "../types";
 import DistributionEditor, { type DistPoint } from "./DistributionEditor";
 
 interface Props {
   onSubmitted: () => void;
+  previous?: Estimate | null;
 }
 
 const DEFAULT_CURVE: DistPoint[] = [
@@ -14,9 +15,21 @@ const DEFAULT_CURVE: DistPoint[] = [
   { year: 2100, p: 0.85 },
 ];
 
-export default function EstimateForm({ onSubmitted }: Props) {
-  const [curve, setCurve] = useState<DistPoint[]>(DEFAULT_CURVE);
-  const [values, setValues] = useState<Partial<Record<QuestionKey, string>>>({});
+export default function EstimateForm({ onSubmitted, previous }: Props) {
+  const prevCurve = previous?.agi_curve ?? null;
+  const [curve, setCurve] = useState<DistPoint[]>(
+    prevCurve && prevCurve.length >= 2 ? prevCurve : DEFAULT_CURVE
+  );
+  const [values, setValues] = useState<Partial<Record<QuestionKey, string>>>(
+    () => {
+      const init: Partial<Record<QuestionKey, string>> = {};
+      for (const q of QUESTIONS) {
+        const v = previous?.[q.key];
+        if (v !== null && v !== undefined) init[q.key] = (v * 100).toString();
+      }
+      return init;
+    }
+  );
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -57,7 +70,9 @@ export default function EstimateForm({ onSubmitted }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="bg-gray-900 rounded-xl p-6 space-y-6">
-      <h2 className="text-lg font-semibold text-gray-100">Submit estimates</h2>
+      <h2 className="text-lg font-semibold text-gray-100">
+        {previous ? "Update estimates" : "Submit estimates"}
+      </h2>
 
       {/* AGI timeline distribution editor */}
       <div>
@@ -65,7 +80,19 @@ export default function EstimateForm({ onSubmitted }: Props) {
         <p className="text-xs text-gray-500 mb-4">
           Drag the handles to set cumulative probability, or use the table below. Add / remove year anchors as needed.
         </p>
-        <DistributionEditor points={curve} onChange={setCurve} />
+        {prevCurve && prevCurve.length >= 2 && (
+          <p className="text-xs text-gray-500 mb-4 flex items-center gap-2">
+            <svg width="24" height="8" className="shrink-0">
+              <line x1="0" y1="4" x2="24" y2="4" stroke="#6b7280" strokeWidth="1.5" strokeDasharray="4 3" />
+            </svg>
+            Your previous estimate
+          </p>
+        )}
+        <DistributionEditor
+          points={curve}
+          onChange={setCurve}
+          reference={prevCurve && prevCurve.length >= 2 ? prevCurve : undefined}
+        />
       </div>
 
       {/* Scalar questions */}

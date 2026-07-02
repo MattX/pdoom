@@ -3,6 +3,7 @@ import {
   clamp,
   increments,
   insertYear,
+  probAt,
   removeAt as removePoint,
   setProbAt,
   setYearAt,
@@ -18,6 +19,8 @@ interface Props {
   onChange: (points: DistPoint[]) => void;
   minYear?: number;
   maxYear?: number;
+  /** Previous estimate to render as a faint reference line while editing. */
+  reference?: DistPoint[];
 }
 
 // ---- geometry (fixed viewBox, scales responsively) ----
@@ -33,6 +36,7 @@ export default function DistributionEditor({
   onChange,
   minYear = MIN_YEAR,
   maxYear = MAX_YEAR,
+  reference,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [selected, setSelected] = useState<number>(-1);
@@ -103,6 +107,18 @@ export default function DistributionEditor({
   const incs = increments(points);
   const maxInc = Math.max(0.0001, ...incs.map((s) => s.p));
 
+  // Reference (previous) curve, sampled at the current columns' years so it
+  // stays aligned even as anchors are added / moved / removed.
+  const refD =
+    reference && reference.length >= 2
+      ? points
+          .map(
+            (pt, i) =>
+              `${i ? "L" : "M"} ${colX(i)} ${valToY(probAt(reference, pt.year))} `,
+          )
+          .join("")
+      : null;
+
   const linePts = points.map((pt, i) => [colX(i), valToY(pt.p)] as const);
   const areaD =
     `M ${linePts[0][0]} ${PLOT.y + PLOT.h} ` +
@@ -135,6 +151,18 @@ export default function DistributionEditor({
         {/* column highlight for selected */}
         {selected >= 0 && (
           <rect x={colLeft(selected)} y={PLOT.y} width={colW} height={PLOT.h} fill="rgba(96,165,250,0.07)" />
+        )}
+
+        {/* previous estimate — faint reference line */}
+        {refD && (
+          <path
+            d={refD}
+            fill="none"
+            stroke="#6b7280"
+            strokeWidth={1.5}
+            strokeDasharray="4 3"
+            strokeLinejoin="round"
+          />
         )}
 
         {/* CDF area + line */}

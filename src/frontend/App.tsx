@@ -104,7 +104,12 @@ export default function App() {
         )}
 
         {showForm && me && (
-          <EstimateForm onSubmitted={handleSubmitted} />
+          <EstimateForm
+            onSubmitted={handleSubmitted}
+            previous={
+              [...estimates].reverse().find((e) => e.user_id === me.id) ?? null
+            }
+          />
         )}
 
         <CurrentEstimates
