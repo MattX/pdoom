@@ -85,7 +85,10 @@ export default function AgiTimelineHeatmap({ estimates, selectedUser }: Props) {
       (e) =>
         e.agi_curve &&
         e.agi_curve.length > 0 &&
-        (!selectedUser || e.user_id === selectedUser)
+        (!selectedUser || e.user_id === selectedUser) &&
+        // Cited third-party predictions don't count toward the median, unless
+        // that person is the one explicitly selected.
+        (!e.external || e.user_id === selectedUser)
     );
     if (relevantEstimates.length === 0) return [];
 

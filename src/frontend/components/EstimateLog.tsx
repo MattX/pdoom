@@ -74,7 +74,20 @@ export default function EstimateLog({ estimates, selectedUser }: Props) {
               )}
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="font-medium text-sm text-gray-100">{e.user_name}</span>
+                  <span className="font-medium text-sm text-gray-100">
+                    {e.user_name}
+                    {e.external && e.source && (
+                      <a
+                        href={e.source}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Source"
+                        className="ml-1 text-gray-500 hover:text-blue-400 transition-colors"
+                      >
+                        ↗
+                      </a>
+                    )}
+                  </span>
                   <span className="text-xs text-gray-600 flex-shrink-0">{timeAgo(e.created_at)}</span>
                 </div>
                 <div className="flex flex-wrap gap-2 mt-1.5">

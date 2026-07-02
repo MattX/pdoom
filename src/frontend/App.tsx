@@ -6,6 +6,7 @@ import EstimateForm from "./components/EstimateForm";
 import HistoryChart from "./components/HistoryChart";
 import EstimateLog from "./components/EstimateLog";
 import MetaculusPanel from "./components/MetaculusPanel";
+import { EXTERNAL_USERS, EXTERNAL_ESTIMATES } from "./externalPredictions";
 
 export default function App() {
   const [me, setMe] = useState<User | null | undefined>(undefined);
@@ -19,8 +20,10 @@ export default function App() {
       api.users(),
       api.estimates(),
     ]);
-    setUsers(users);
-    setEstimates(estimates);
+    setUsers([...users, ...EXTERNAL_USERS]);
+    setEstimates(
+      [...estimates, ...EXTERNAL_ESTIMATES].sort((a, b) => b.created_at - a.created_at)
+    );
   }, []);
 
   useEffect(() => {

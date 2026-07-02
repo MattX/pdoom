@@ -15,10 +15,11 @@ function pct(v: number | null): string {
 }
 
 export default function CurrentEstimates({ estimates, users, selectedUser, onSelectUser }: Props) {
-  // Get latest estimate per user
+  // Get latest estimate per user (highest created_at, regardless of array order)
   const latestByUser = new Map<string, Estimate>();
-  for (const e of [...estimates].reverse()) {
-    if (!latestByUser.has(e.user_id)) latestByUser.set(e.user_id, e);
+  for (const e of estimates) {
+    const cur = latestByUser.get(e.user_id);
+    if (!cur || e.created_at > cur.created_at) latestByUser.set(e.user_id, e);
   }
 
   const rows = users
@@ -108,6 +109,18 @@ export default function CurrentEstimates({ estimates, users, selectedUser, onSel
                       </div>
                     )}
                     <span className="text-gray-100">{user.name}</span>
+                    {user.external && user.source && (
+                      <a
+                        href={user.source}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        title="Source"
+                        className="text-gray-500 hover:text-blue-400 transition-colors"
+                      >
+                        ↗
+                      </a>
+                    )}
                   </div>
                 </td>
                 {CURVE_REF_YEARS.map((y) => (

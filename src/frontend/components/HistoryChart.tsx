@@ -31,10 +31,11 @@ function pct(v: number | null): string {
 
 export default function HistoryChart({ estimates, users, selectedUser }: Props) {
   const [agiView, setAgiView] = useState<"curves" | "heatmap">("curves");
-  // Latest estimate per user
+  // Latest estimate per user (highest created_at, regardless of array order)
   const latestByUser = new Map<string, Estimate>();
-  for (const e of [...estimates].reverse()) {
-    if (!latestByUser.has(e.user_id)) latestByUser.set(e.user_id, e);
+  for (const e of estimates) {
+    const cur = latestByUser.get(e.user_id);
+    if (!cur || e.created_at > cur.created_at) latestByUser.set(e.user_id, e);
   }
 
   const userMap = new Map(users.map((u) => [u.id, u]));
@@ -165,12 +166,21 @@ export default function HistoryChart({ estimates, users, selectedUser }: Props) 
           const color = QUESTION_COLORS[q.key];
 
           const points = activeEstimates
-            .map((e) => ({ user: userMap.get(e.user_id)!, value: e[q.key] }))
-            .filter((p) => p.value !== null && p.user) as { user: User; value: number }[];
+            .map((e) => ({ user: userMap.get(e.user_id)!, value: e[q.key], external: e.external }))
+            .filter((p) => p.value !== null && p.user) as {
+            user: User;
+            value: number;
+            external?: boolean;
+          }[];
 
           if (points.length === 0) return null;
 
-          const mean = points.reduce((s, p) => s + p.value, 0) / points.length;
+          // Cited third-party predictions are shown as dots but excluded from the average.
+          const meanPoints = points.filter((p) => !p.external);
+          const mean =
+            meanPoints.length > 0
+              ? meanPoints.reduce((s, p) => s + p.value, 0) / meanPoints.length
+              : null;
 
           return (
             <div key={q.key}>
@@ -178,9 +188,11 @@ export default function HistoryChart({ estimates, users, selectedUser }: Props) 
                 <span className="text-sm font-medium" style={{ color }}>
                   {q.label}
                 </span>
-                <span className="text-xs text-gray-500">
-                  avg {pct(mean)}
-                </span>
+                {mean !== null && (
+                  <span className="text-xs text-gray-500">
+                    avg {pct(mean)}
+                  </span>
+                )}
               </div>
 
               {/* Track */}
@@ -198,10 +210,12 @@ export default function HistoryChart({ estimates, users, selectedUser }: Props) 
                 ))}
 
                 {/* Mean marker */}
-                <div
-                  className="absolute top-1/2 -translate-y-1/2 w-0.5 h-6 rounded-full opacity-60"
-                  style={{ left: `${mean * 100}%`, backgroundColor: color }}
-                />
+                {mean !== null && (
+                  <div
+                    className="absolute top-1/2 -translate-y-1/2 w-0.5 h-6 rounded-full opacity-60"
+                    style={{ left: `${mean * 100}%`, backgroundColor: color }}
+                  />
+                )}
 
                 {/* User dots */}
                 {points.map(({ user, value }) => (

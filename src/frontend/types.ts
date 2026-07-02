@@ -6,6 +6,10 @@ export interface User {
   name: string;
   picture: string | null;
   email?: string;
+  // Cited third-party predictions (not site users). Excluded from aggregate
+  // stats (medians, averages); `source` links to the original.
+  external?: boolean;
+  source?: string | null;
 }
 
 export interface Estimate {
@@ -17,6 +21,9 @@ export interface Estimate {
   pdoom_given_agi: number | null;
   note: string | null;
   created_at: number;
+  // Mirrors User.external/source for the denormalized log view.
+  external?: boolean;
+  source?: string | null;
 }
 
 // Scalar questions shown as separate inputs / columns (AGI timeline uses the distribution editor)
