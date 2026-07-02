@@ -9,6 +9,7 @@ export interface Env {
   JWT_SECRET: string;
   APP_URL: string;
   METACULUS_API_KEY: string;
+  DISCORD_WEBHOOK_URL?: string;
 }
 
 export interface User {

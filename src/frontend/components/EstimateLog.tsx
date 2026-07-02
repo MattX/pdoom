@@ -11,6 +11,12 @@ function pct(v: number): string {
   return `${(v * 100).toFixed(1)}%`;
 }
 
+function delta(current: number, previous: number): string {
+  const d = (current - previous) * 100;
+  const sign = d >= 0 ? "+" : "";
+  return `${sign}${d.toFixed(1)}pp`;
+}
+
 function timeAgo(ts: number): string {
   const diff = Math.floor((Date.now() - ts * 1000) / 1000);
   if (diff < 60) return "just now";
@@ -20,10 +26,25 @@ function timeAgo(ts: number): string {
   return new Date(ts * 1000).toLocaleDateString();
 }
 
+// Build a map from estimate id -> the previous estimate for that user (by created_at)
+function buildPrevMap(estimates: Estimate[]): Map<number, Estimate> {
+  const sorted = [...estimates].sort((a, b) => a.created_at - b.created_at);
+  const lastByUser = new Map<string, Estimate>();
+  const prevMap = new Map<number, Estimate>();
+  for (const e of sorted) {
+    const prev = lastByUser.get(e.user_id);
+    if (prev) prevMap.set(e.id, prev);
+    lastByUser.set(e.user_id, e);
+  }
+  return prevMap;
+}
+
 export default function EstimateLog({ estimates, selectedUser }: Props) {
   const filtered = selectedUser
     ? estimates.filter((e) => e.user_id === selectedUser)
     : estimates;
+
+  const prevMap = buildPrevMap(estimates);
 
   if (filtered.length === 0) {
     return (
@@ -39,7 +60,9 @@ export default function EstimateLog({ estimates, selectedUser }: Props) {
         <h2 className="text-lg font-semibold">Log</h2>
       </div>
       <ul className="divide-y divide-gray-800">
-        {filtered.slice(0, 100).map((e) => (
+        {filtered.slice(0, 100).map((e) => {
+          const prev = prevMap.get(e.id);
+          return (
           <li key={e.id} className="p-4 hover:bg-gray-800/30 transition-colors">
             <div className="flex items-start gap-3">
               {e.user_picture ? (
@@ -56,18 +79,34 @@ export default function EstimateLog({ estimates, selectedUser }: Props) {
                 </div>
                 <div className="flex flex-wrap gap-2 mt-1.5">
                   {/* AGI curve summary — show P(by year) at a few reference years */}
-                  {e.agi_curve && e.agi_curve.length > 0 && CURVE_REF_YEARS.map((y) => (
-                    <span
-                      key={y}
-                      className="text-xs px-2 py-0.5 rounded-full bg-gray-800 font-mono text-blue-300"
-                    >
-                      AGI by {y}: {pct(probAt(e.agi_curve!, y))}
-                    </span>
-                  ))}
+                  {e.agi_curve && e.agi_curve.length > 0 && CURVE_REF_YEARS.map((y) => {
+                    const cur = probAt(e.agi_curve!, y);
+                    const prevVal = prev?.agi_curve && prev.agi_curve.length > 0
+                      ? probAt(prev.agi_curve, y)
+                      : null;
+                    const d = prevVal !== null ? delta(cur, prevVal) : null;
+                    const isPos = d !== null && !d.startsWith("-");
+                    return (
+                      <span
+                        key={y}
+                        className="text-xs px-2 py-0.5 rounded-full bg-gray-800 font-mono text-blue-300"
+                      >
+                        AGI by {y}: {pct(cur)}
+                        {d !== null && (
+                          <span className={`ml-1 ${isPos ? "text-red-400" : "text-green-400"}`}>
+                            {d}
+                          </span>
+                        )}
+                      </span>
+                    );
+                  })}
                   {/* Scalar questions */}
                   {QUESTIONS.map((q) => {
                     const val = e[q.key];
                     if (val === null) return null;
+                    const prevVal = prev?.[q.key] ?? null;
+                    const d = prevVal !== null ? delta(val, prevVal) : null;
+                    const isPos = d !== null && !d.startsWith("-");
                     return (
                       <span
                         key={q.key}
@@ -75,6 +114,11 @@ export default function EstimateLog({ estimates, selectedUser }: Props) {
                         style={{ color: QUESTION_COLORS[q.key] }}
                       >
                         {q.label}: {pct(val)}
+                        {d !== null && (
+                          <span className={`ml-1 ${isPos ? "text-red-400" : "text-green-400"}`}>
+                            {d}
+                          </span>
+                        )}
                       </span>
                     );
                   })}
@@ -85,7 +129,8 @@ export default function EstimateLog({ estimates, selectedUser }: Props) {
               </div>
             </div>
           </li>
-        ))}
+          );
+        })}
       </ul>
     </div>
   );

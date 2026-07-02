@@ -2,9 +2,69 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { getCookie } from "hono/cookie";
 import type { Env, EstimateRowWithUser, EstimateWithUser } from "./types";
-import { normalize, MIN_YEAR, MAX_YEAR, type DistPoint } from "../shared/distribution";
+import { normalize, probAt, MIN_YEAR, MAX_YEAR, type DistPoint } from "../shared/distribution";
 import { authRouter } from "./auth";
 import { verifyJWT } from "./jwt";
+
+const CURVE_REF_YEARS = [2030, 2040, 2050] as const;
+
+function pct(v: number): string {
+  return `${(v * 100).toFixed(1)}%`;
+}
+
+function deltaStr(cur: number, prev: number): string {
+  const d = (cur - prev) * 100;
+  return d >= 0 ? `+${d.toFixed(1)}pp` : `${d.toFixed(1)}pp`;
+}
+
+async function notifyDiscord(
+  webhookUrl: string,
+  estimate: EstimateWithUser,
+  prev: EstimateWithUser | null,
+  appUrl: string,
+): Promise<void> {
+  const fields: { name: string; value: string; inline: boolean }[] = [];
+
+  if (estimate.agi_curve && estimate.agi_curve.length > 0) {
+    for (const y of CURVE_REF_YEARS) {
+      const cur = probAt(estimate.agi_curve, y);
+      const prevVal =
+        prev?.agi_curve && prev.agi_curve.length > 0 ? probAt(prev.agi_curve, y) : null;
+      const value =
+        prevVal !== null ? `${pct(cur)} (${deltaStr(cur, prevVal)})` : pct(cur);
+      fields.push({ name: `AGI by ${y}`, value, inline: true });
+    }
+  }
+
+  if (estimate.pdoom_given_agi !== null) {
+    const cur = estimate.pdoom_given_agi;
+    const prevVal = prev?.pdoom_given_agi ?? null;
+    const value =
+      prevVal !== null ? `${pct(cur)} (${deltaStr(cur, prevVal)})` : pct(cur);
+    fields.push({ name: "P(doom | AGI)", value, inline: true });
+  }
+
+  const embed: Record<string, unknown> = {
+    author: {
+      name: estimate.user_name,
+      ...(estimate.user_picture ? { icon_url: estimate.user_picture } : {}),
+    },
+    color: 0xef4444,
+    fields,
+    url: appUrl,
+    timestamp: new Date(estimate.created_at * 1000).toISOString(),
+  };
+
+  if (estimate.note) {
+    embed.description = `*"${estimate.note}"*`;
+  }
+
+  await fetch(webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ embeds: [embed] }),
+  });
+}
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -116,6 +176,17 @@ app.post("/api/estimates", async (c) => {
     (body.pdoom_given_agi !== undefined && body.pdoom_given_agi !== null);
   if (!hasAny) return c.json({ error: "At least one estimate is required" }, 400);
 
+  // Fetch previous estimate before inserting (for delta in Discord notification)
+  const prevRow = c.env.DISCORD_WEBHOOK_URL
+    ? await c.env.DB.prepare(
+        `SELECT e.*, u.name as user_name, u.picture as user_picture
+         FROM estimates e JOIN users u ON e.user_id = u.id
+         WHERE e.user_id = ? ORDER BY e.created_at DESC LIMIT 1`
+      )
+        .bind(session.sub)
+        .first<EstimateRowWithUser>()
+    : null;
+
   const result = await c.env.DB.prepare(
     `INSERT INTO estimates (user_id, agi_curve, pdoom_given_agi, note)
      VALUES (?, ?, ?, ?)`
@@ -127,6 +198,34 @@ app.post("/api/estimates", async (c) => {
       body.note ?? null
     )
     .run();
+
+  if (c.env.DISCORD_WEBHOOK_URL) {
+    const user = await c.env.DB.prepare("SELECT * FROM users WHERE id = ?")
+      .bind(session.sub)
+      .first<{ name: string; picture: string | null }>();
+
+    const newEstimate: EstimateWithUser = {
+      id: result.meta.last_row_id as number,
+      user_id: session.sub,
+      user_name: user?.name ?? session.name,
+      user_picture: user?.picture ?? session.picture,
+      agi_curve: normalizedCurve,
+      pdoom_given_agi: body.pdoom_given_agi ?? null,
+      note: body.note ?? null,
+      created_at: Math.floor(Date.now() / 1000),
+    };
+
+    const prevEstimate: EstimateWithUser | null = prevRow
+      ? { ...prevRow, agi_curve: prevRow.agi_curve ? JSON.parse(prevRow.agi_curve) : null }
+      : null;
+
+    // Fire-and-forget; don't let Discord failures affect the response
+    c.executionCtx.waitUntil(
+      notifyDiscord(c.env.DISCORD_WEBHOOK_URL, newEstimate, prevEstimate, c.env.APP_URL).catch(
+        () => {}
+      )
+    );
+  }
 
   return c.json({ id: result.meta.last_row_id }, 201);
 });
